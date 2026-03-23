@@ -79,6 +79,7 @@ OPENING_BOOK = {
 }
 
 SETTINGS_FILE = "settings.json"
+SETTINGS_DIR = "settings_profiles"
 
 
 class StockfishGUI:
@@ -125,8 +126,21 @@ class StockfishGUI:
         self.inconsistency_cp_var = tk.IntVar(value=120)
         self.practical_style_var = tk.StringVar(value="Balanced")
         self.opponent_profile_var = tk.StringVar(value="Club")
+        self.style_floor_var = tk.IntVar(value=180)
+        self.style_bonus_gap_var = tk.IntVar(value=20)
+        self.style_random_top_var = tk.IntVar(value=2)
+        self.style_noise_var = tk.DoubleVar(value=0.12)
+        self.dev_weight_var = tk.DoubleVar(value=0.35)
+        self.castle_weight_var = tk.DoubleVar(value=0.55)
+        self.center_pawn_weight_var = tk.DoubleVar(value=0.25)
+        self.capture_weight_var = tk.DoubleVar(value=0.22)
+        self.check_weight_var = tk.DoubleVar(value=0.18)
+        self.retreat_penalty_var = tk.DoubleVar(value=0.30)
+        self.conversion_weight_var = tk.DoubleVar(value=0.45)
         self.flip_board_var = tk.BooleanVar(value=False)
         self.jump_ply_var = tk.IntVar(value=0)
+        self.current_settings_file = self._settings_path()
+        self.settings_file_var = tk.StringVar(value=str(self.current_settings_file))
 
         self.best_move_var = tk.StringVar(value="Best move: -")
         self.best_score_var = tk.StringVar(value="Eval: -")
@@ -148,7 +162,7 @@ class StockfishGUI:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _on_close(self) -> None:
-        self._save_settings()
+        self._save_settings(silent=True)
         self.cancel_analysis(silent=True)
         self._close_engine()
         self.analysis_executor.shutdown(wait=False, cancel_futures=True)
@@ -157,28 +171,13 @@ class StockfishGUI:
     def _settings_path(self) -> Path:
         return Path(__file__).resolve().parent / SETTINGS_FILE
 
-    def _load_settings(self) -> None:
-        path = self._settings_path()
-        if not path.exists():
-            return
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
-        except (OSError, json.JSONDecodeError):
-            return
+    def _settings_profiles_dir(self) -> Path:
+        path = Path(__file__).resolve().parent / SETTINGS_DIR
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
-        self.engine_path_var.set(data.get("engine_path", self.engine_path_var.get()))
-        self.depth_var.set(int(data.get("depth", self.depth_var.get())))
-        self.lines_var.set(int(data.get("top_lines", self.lines_var.get())))
-        self.inconsistency_cp_var.set(int(data.get("inconsistency_cp", self.inconsistency_cp_var.get())))
-        self.practical_style_var.set(data.get("practical_style", self.practical_style_var.get()))
-        self.opponent_profile_var.set(data.get("opponent_profile", self.opponent_profile_var.get()))
-        self.flip_board_var.set(bool(data.get("flip_board", self.flip_board_var.get())))
-        self.position_analyze_mode_var.set(data.get("position_threshold", self.position_analyze_mode_var.get()))
-        self.position_analyze_color_var.set(data.get("position_color", self.position_analyze_color_var.get()))
-
-    def _save_settings(self) -> None:
-        data = {
+    def _collect_settings_data(self) -> dict:
+        return {
             "engine_path": self.engine_path_var.get().strip(),
             "depth": int(self.depth_var.get()),
             "top_lines": int(self.lines_var.get()),
@@ -188,12 +187,115 @@ class StockfishGUI:
             "flip_board": bool(self.flip_board_var.get()),
             "position_threshold": self.position_analyze_mode_var.get(),
             "position_color": self.position_analyze_color_var.get(),
+            "style_floor": int(self.style_floor_var.get()),
+            "style_bonus_gap": int(self.style_bonus_gap_var.get()),
+            "style_random_top": int(self.style_random_top_var.get()),
+            "style_noise": float(self.style_noise_var.get()),
+            "dev_weight": float(self.dev_weight_var.get()),
+            "castle_weight": float(self.castle_weight_var.get()),
+            "center_pawn_weight": float(self.center_pawn_weight_var.get()),
+            "capture_weight": float(self.capture_weight_var.get()),
+            "check_weight": float(self.check_weight_var.get()),
+            "retreat_penalty": float(self.retreat_penalty_var.get()),
+            "conversion_weight": float(self.conversion_weight_var.get()),
         }
+
+    def _apply_settings_data(self, data: dict) -> None:
+        self.engine_path_var.set(data.get("engine_path", self.engine_path_var.get()))
+        self.depth_var.set(int(data.get("depth", self.depth_var.get())))
+        self.lines_var.set(int(data.get("top_lines", self.lines_var.get())))
+        self.inconsistency_cp_var.set(int(data.get("inconsistency_cp", self.inconsistency_cp_var.get())))
+        self.practical_style_var.set(data.get("practical_style", self.practical_style_var.get()))
+        self.opponent_profile_var.set(data.get("opponent_profile", self.opponent_profile_var.get()))
+        self.flip_board_var.set(bool(data.get("flip_board", self.flip_board_var.get())))
+        self.position_analyze_mode_var.set(data.get("position_threshold", self.position_analyze_mode_var.get()))
+        self.position_analyze_color_var.set(data.get("position_color", self.position_analyze_color_var.get()))
+        self.style_floor_var.set(int(data.get("style_floor", self.style_floor_var.get())))
+        self.style_bonus_gap_var.set(int(data.get("style_bonus_gap", self.style_bonus_gap_var.get())))
+        self.style_random_top_var.set(int(data.get("style_random_top", self.style_random_top_var.get())))
+        self.style_noise_var.set(float(data.get("style_noise", self.style_noise_var.get())))
+        self.dev_weight_var.set(float(data.get("dev_weight", self.dev_weight_var.get())))
+        self.castle_weight_var.set(float(data.get("castle_weight", self.castle_weight_var.get())))
+        self.center_pawn_weight_var.set(float(data.get("center_pawn_weight", self.center_pawn_weight_var.get())))
+        self.capture_weight_var.set(float(data.get("capture_weight", self.capture_weight_var.get())))
+        self.check_weight_var.set(float(data.get("check_weight", self.check_weight_var.get())))
+        self.retreat_penalty_var.set(float(data.get("retreat_penalty", self.retreat_penalty_var.get())))
+        self.conversion_weight_var.set(float(data.get("conversion_weight", self.conversion_weight_var.get())))
+
+    def _load_settings_from_path(self, path: Path, silent: bool = False) -> bool:
+        if not path.exists():
+            return False
         try:
-            with open(self._settings_path(), "w", encoding="utf-8") as handle:
-                json.dump(data, handle, indent=2)
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            if not silent:
+                messagebox.showerror("Settings Error", f"Could not load settings file: {path}")
+            return False
+        self._apply_settings_data(data)
+        self.current_settings_file = path
+        self.settings_file_var.set(str(path))
+        if not silent:
+            self.info_var.set(f"Loaded settings: {path.name}")
+        return True
+
+    def _save_settings_to_path(self, path: Path, silent: bool = False) -> bool:
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(self._collect_settings_data(), handle, indent=2)
         except OSError:
-            pass
+            if not silent:
+                messagebox.showerror("Settings Error", f"Could not save settings file: {path}")
+            return False
+        self.current_settings_file = path
+        self.settings_file_var.set(str(path))
+        if not silent:
+            self.info_var.set(f"Saved settings: {path.name}")
+        return True
+
+    def _load_settings(self) -> None:
+        default_path = self._settings_path()
+        if self._load_settings_from_path(default_path, silent=True):
+            return
+        self._sync_playstyle_from_preset()
+
+    def _save_settings(self, silent: bool = False) -> None:
+        self._save_settings_to_path(self.current_settings_file, silent=silent)
+
+    def _save_settings_as(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Save Settings As",
+            defaultextension=".json",
+            initialdir=str(self._settings_profiles_dir()),
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._save_settings_to_path(Path(path), silent=False)
+
+    def _load_settings_dialog(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Load Settings",
+            initialdir=str(self._settings_profiles_dir()),
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._load_settings_from_path(Path(path), silent=False)
+        self._refresh_board_state()
+
+    def _new_settings_file(self) -> None:
+        self._sync_playstyle_from_preset()
+        target = filedialog.asksaveasfilename(
+            title="Create New Settings File",
+            defaultextension=".json",
+            initialdir=str(self._settings_profiles_dir()),
+            initialfile="new_profile.json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not target:
+            return
+        self._save_settings_to_path(Path(target), silent=False)
 
     def _close_engine(self) -> None:
         with self.engine_lock:
@@ -306,6 +408,7 @@ class StockfishGUI:
             width=12,
         )
         style_box.grid(row=2, column=1, sticky="w", pady=(8, 0))
+        style_box.bind("<<ComboboxSelected>>", lambda _e: self._sync_playstyle_from_preset())
 
         ttk.Label(panel, text="Opponent Profile").grid(row=2, column=2, sticky="w", pady=(8, 0))
         ttk.Combobox(
@@ -337,7 +440,51 @@ class StockfishGUI:
         self.cancel_analysis_btn = ttk.Button(async_row, text="Cancel Analysis", command=self.cancel_analysis, state=tk.DISABLED)
         self.cancel_analysis_btn.grid(row=0, column=0, sticky="ew")
 
-        ttk.Button(panel, text="Save Settings", command=self._save_settings).grid(row=6, column=2, sticky="e", pady=(8, 0))
+        tune = ttk.LabelFrame(panel, text="Playstyle Tuning", padding=8)
+        tune.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        tune.columnconfigure((1, 3), weight=1)
+
+        ttk.Label(tune, text="Winning Floor").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(tune, from_=50, to=500, textvariable=self.style_floor_var, width=8).grid(row=0, column=1, sticky="w")
+        ttk.Label(tune, text="Gap Bonus").grid(row=0, column=2, sticky="w", padx=(12, 0))
+        ttk.Spinbox(tune, from_=0, to=300, textvariable=self.style_bonus_gap_var, width=8).grid(row=0, column=3, sticky="w")
+
+        ttk.Label(tune, text="Random Top N").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Spinbox(tune, from_=1, to=8, textvariable=self.style_random_top_var, width=8).grid(row=1, column=1, sticky="w", pady=(6, 0))
+        ttk.Label(tune, text="Human Noise").grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=0.5, variable=self.style_noise_var, orient=tk.HORIZONTAL).grid(row=1, column=3, sticky="ew", pady=(6, 0))
+
+        ttk.Label(tune, text="Dev Bonus").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.dev_weight_var, orient=tk.HORIZONTAL).grid(row=2, column=1, sticky="ew", pady=(6, 0))
+        ttk.Label(tune, text="Castle Bonus").grid(row=2, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.castle_weight_var, orient=tk.HORIZONTAL).grid(row=2, column=3, sticky="ew", pady=(6, 0))
+
+        ttk.Label(tune, text="Center Pawn").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.center_pawn_weight_var, orient=tk.HORIZONTAL).grid(row=3, column=1, sticky="ew", pady=(6, 0))
+        ttk.Label(tune, text="Capture Bonus").grid(row=3, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.capture_weight_var, orient=tk.HORIZONTAL).grid(row=3, column=3, sticky="ew", pady=(6, 0))
+
+        ttk.Label(tune, text="Check Bonus").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.check_weight_var, orient=tk.HORIZONTAL).grid(row=4, column=1, sticky="ew", pady=(6, 0))
+        ttk.Label(tune, text="Retreat Penalty").grid(row=4, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.retreat_penalty_var, orient=tk.HORIZONTAL).grid(row=4, column=3, sticky="ew", pady=(6, 0))
+
+        ttk.Label(tune, text="Conversion Bonus").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.conversion_weight_var, orient=tk.HORIZONTAL).grid(row=5, column=1, sticky="ew", pady=(6, 0))
+
+        file_row = ttk.Frame(panel)
+        file_row.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        file_row.columnconfigure(1, weight=1)
+        ttk.Label(file_row, text="Settings File").grid(row=0, column=0, sticky="w")
+        ttk.Entry(file_row, textvariable=self.settings_file_var).grid(row=0, column=1, sticky="ew", padx=(8, 8))
+
+        action_row = ttk.Frame(panel)
+        action_row.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        action_row.columnconfigure((0, 1, 2, 3), weight=1)
+        ttk.Button(action_row, text="New Settings", command=self._new_settings_file).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ttk.Button(action_row, text="Load Settings", command=self._load_settings_dialog).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Button(action_row, text="Save", command=self._save_settings).grid(row=0, column=2, sticky="ew", padx=4)
+        ttk.Button(action_row, text="Save As", command=self._save_settings_as).grid(row=0, column=3, sticky="ew", padx=(4, 0))
 
     def _position_panel(self, parent: ttk.Frame) -> None:
         panel = ttk.LabelFrame(parent, text="Position Builder", padding=10)
@@ -787,18 +934,84 @@ class StockfishGUI:
                 candidates.append(move)
         return candidates
 
-    def _practical_style_params(self) -> dict:
+    def _sync_playstyle_from_preset(self) -> None:
         style = self.practical_style_var.get().strip().lower()
-        mapping = {
-            "safe": {"floor": 260, "bonus_gap": 0, "random_top": 1, "human_noise": 0.05},
-            "balanced": {"floor": 180, "bonus_gap": 20, "random_top": 2, "human_noise": 0.12},
-            "tricky": {"floor": 120, "bonus_gap": 40, "random_top": 3, "human_noise": 0.18},
-            "chaotic": {"floor": 70, "bonus_gap": 80, "random_top": 4, "human_noise": 0.24},
+        presets = {
+            "safe": {
+                "style_floor": 260,
+                "style_bonus_gap": 0,
+                "style_random_top": 1,
+                "style_noise": 0.05,
+                "dev_weight": 0.30,
+                "castle_weight": 0.65,
+                "center_pawn_weight": 0.20,
+                "capture_weight": 0.18,
+                "check_weight": 0.15,
+                "retreat_penalty": 0.40,
+                "conversion_weight": 0.55,
+            },
+            "balanced": {
+                "style_floor": 180,
+                "style_bonus_gap": 20,
+                "style_random_top": 2,
+                "style_noise": 0.12,
+                "dev_weight": 0.35,
+                "castle_weight": 0.55,
+                "center_pawn_weight": 0.25,
+                "capture_weight": 0.22,
+                "check_weight": 0.18,
+                "retreat_penalty": 0.30,
+                "conversion_weight": 0.45,
+            },
+            "tricky": {
+                "style_floor": 120,
+                "style_bonus_gap": 40,
+                "style_random_top": 3,
+                "style_noise": 0.18,
+                "dev_weight": 0.40,
+                "castle_weight": 0.40,
+                "center_pawn_weight": 0.30,
+                "capture_weight": 0.28,
+                "check_weight": 0.27,
+                "retreat_penalty": 0.18,
+                "conversion_weight": 0.38,
+            },
+            "chaotic": {
+                "style_floor": 70,
+                "style_bonus_gap": 80,
+                "style_random_top": 4,
+                "style_noise": 0.24,
+                "dev_weight": 0.45,
+                "castle_weight": 0.30,
+                "center_pawn_weight": 0.35,
+                "capture_weight": 0.32,
+                "check_weight": 0.35,
+                "retreat_penalty": 0.10,
+                "conversion_weight": 0.30,
+            },
         }
-        base = mapping.get(style, mapping["balanced"]).copy()
+        preset = presets.get(style, presets["balanced"])
+        self._apply_settings_data(preset)
+
+    def _practical_style_params(self) -> dict:
+        base = {
+            "floor": int(self.style_floor_var.get()),
+            "bonus_gap": int(self.style_bonus_gap_var.get()),
+            "random_top": int(self.style_random_top_var.get()),
+            "human_noise": float(self.style_noise_var.get()),
+            "dev_weight": float(self.dev_weight_var.get()),
+            "castle_weight": float(self.castle_weight_var.get()),
+            "center_pawn_weight": float(self.center_pawn_weight_var.get()),
+            "capture_weight": float(self.capture_weight_var.get()),
+            "check_weight": float(self.check_weight_var.get()),
+            "retreat_penalty": float(self.retreat_penalty_var.get()),
+            "conversion_weight": float(self.conversion_weight_var.get()),
+        }
         profile = profile_params(self.opponent_profile_var.get())
         base["floor"] = max(50, base["floor"] - int(profile["risk_bonus"]))
         base["bonus_gap"] = max(0, base["bonus_gap"] + int(profile["risk_bonus"]))
+        base["random_top"] = max(1, min(8, base["random_top"]))
+        base["human_noise"] = max(0.0, min(0.5, base["human_noise"]))
         return base
 
     def _side_cp(self, cp_white: int, side_factor: int) -> int:
@@ -817,16 +1030,16 @@ class StockfishGUI:
         # Human tendencies: development and king safety early, simpler conversion later.
         if phase <= 20:
             if piece.piece_type in (chess.KNIGHT, chess.BISHOP) and chess.square_rank(move.from_square) in (0, 7):
-                score += 0.35
+                score += style["dev_weight"]
             if board.is_castling(move):
-                score += 0.55
+                score += style["castle_weight"]
             if piece.piece_type == chess.PAWN and chess.square_file(move.to_square) in (2, 3, 4, 5):
-                score += 0.25
+                score += style["center_pawn_weight"]
 
         if is_capture:
-            score += 0.22
+            score += style["capture_weight"]
         if gives_check:
-            score += 0.18
+            score += style["check_weight"]
 
         # Avoid very engine-looking backward shuffles unless tactical.
         from_rank = chess.square_rank(move.from_square)
@@ -836,10 +1049,10 @@ class StockfishGUI:
         else:
             retreat = to_rank > from_rank
         if retreat and not (is_capture or gives_check):
-            score -= 0.3
+            score -= style["retreat_penalty"]
 
         # Slight preference for cleaner winning conversion.
-        score += min(0.45, max(0.0, (side_cp - style["floor"]) / 900))
+        score += min(style["conversion_weight"], max(0.0, (side_cp - style["floor"]) / 900))
 
         # Human-like imperfections.
         score += random.uniform(-style["human_noise"], style["human_noise"])

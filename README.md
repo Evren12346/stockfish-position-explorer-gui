@@ -22,6 +22,12 @@ A clean desktop GUI for building chess positions and asking Stockfish for move s
 - Hard cancel for active searches (terminates current engine session immediately)
 - Practical style presets: Safe, Balanced, Tricky, Chaotic
 - Opponent profile presets: Beginner, Club, Advanced, Engine-like
+- Deep playstyle tuning controls:
+  - Winning floor
+  - Gap bonus
+  - Random top-N choice pool
+  - Human noise
+  - Heuristic weights for development/castling/center pawns/captures/checks/retreat penalty/conversion bonus
 - Opening-book fallback before engine search in familiar opening positions
 - Analysis cache by position/depth/line count for faster repeated lookups
 - Position Analyze Mode:
@@ -46,6 +52,11 @@ A clean desktop GUI for building chess positions and asking Stockfish for move s
 - Analysis history log
 - Eval graph over move history
 - Persistent settings (`settings.json`) for engine path, depth, profile, thresholds, and UI preferences
+- Settings profile files:
+  - Create a new settings file
+  - Load any existing settings file
+  - Save current settings to active profile
+  - Save As to branch multiple playstyle profiles
 
 ## Requirements
 
@@ -144,6 +155,17 @@ py app.py
 ```
 
 If Stockfish is not auto-detected, click Browse in the app and select the Stockfish executable manually.
+
+## Settings Profiles (New / Load / Save)
+
+Use the Engine panel settings controls to avoid reconfiguring every session:
+
+- New Settings: create a fresh profile file in `settings_profiles/`
+- Load Settings: load any saved `.json` profile
+- Save: overwrite the currently active profile
+- Save As: write current settings to a new profile file
+
+The active settings file path is shown directly in the app.
 
 ## Generic Install
 
