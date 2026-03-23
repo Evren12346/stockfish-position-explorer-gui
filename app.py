@@ -82,6 +82,42 @@ SETTINGS_FILE = "settings.json"
 SETTINGS_DIR = "settings_profiles"
 
 
+class ToolTip:
+    def __init__(self, widget: tk.Widget, text: str) -> None:
+        self.widget = widget
+        self.text = text
+        self.tip_window: tk.Toplevel | None = None
+        self.widget.bind("<Enter>", self._show)
+        self.widget.bind("<Leave>", self._hide)
+
+    def _show(self, _event: tk.Event | None = None) -> None:
+        if self.tip_window is not None or not self.text:
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            tw,
+            text=self.text,
+            justify=tk.LEFT,
+            background="#1e2933",
+            foreground="#ecf4ff",
+            relief=tk.SOLID,
+            borderwidth=1,
+            padx=6,
+            pady=4,
+            font=("Segoe UI", 9),
+        )
+        label.pack()
+
+    def _hide(self, _event: tk.Event | None = None) -> None:
+        if self.tip_window is not None:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+
 class StockfishGUI:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -160,6 +196,9 @@ class StockfishGUI:
         self._update_move_list()
         self._draw_board()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _add_tooltip(self, widget: tk.Widget, text: str) -> None:
+        ToolTip(widget, text)
 
     def _on_close(self) -> None:
         self._save_settings(silent=True)
@@ -409,15 +448,18 @@ class StockfishGUI:
         )
         style_box.grid(row=2, column=1, sticky="w", pady=(8, 0))
         style_box.bind("<<ComboboxSelected>>", lambda _e: self._sync_playstyle_from_preset())
+        self._add_tooltip(style_box, "Preset baseline for practical move behavior. You can fine-tune below.")
 
         ttk.Label(panel, text="Opponent Profile").grid(row=2, column=2, sticky="w", pady=(8, 0))
-        ttk.Combobox(
+        profile_box = ttk.Combobox(
             panel,
             values=["Beginner", "Club", "Advanced", "Engine-like"],
             textvariable=self.opponent_profile_var,
             state="readonly",
             width=12,
-        ).grid(row=2, column=2, sticky="e", pady=(8, 0))
+        )
+        profile_box.grid(row=2, column=2, sticky="e", pady=(8, 0))
+        self._add_tooltip(profile_box, "Adjusts risk tolerance to match expected opponent strength.")
 
         btn_row = ttk.Frame(panel)
         btn_row.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(10, 0))
@@ -445,46 +487,78 @@ class StockfishGUI:
         tune.columnconfigure((1, 3), weight=1)
 
         ttk.Label(tune, text="Winning Floor").grid(row=0, column=0, sticky="w")
-        ttk.Spinbox(tune, from_=50, to=500, textvariable=self.style_floor_var, width=8).grid(row=0, column=1, sticky="w")
+        floor_spin = ttk.Spinbox(tune, from_=50, to=500, textvariable=self.style_floor_var, width=8)
+        floor_spin.grid(row=0, column=1, sticky="w")
+        self._add_tooltip(floor_spin, "Minimum score target for practical winning candidates. Higher is safer.")
         ttk.Label(tune, text="Gap Bonus").grid(row=0, column=2, sticky="w", padx=(12, 0))
-        ttk.Spinbox(tune, from_=0, to=300, textvariable=self.style_bonus_gap_var, width=8).grid(row=0, column=3, sticky="w")
+        gap_spin = ttk.Spinbox(tune, from_=0, to=300, textvariable=self.style_bonus_gap_var, width=8)
+        gap_spin.grid(row=0, column=3, sticky="w")
+        self._add_tooltip(gap_spin, "Extra centipawn slack allowed from best move for practical picks.")
 
         ttk.Label(tune, text="Random Top N").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Spinbox(tune, from_=1, to=8, textvariable=self.style_random_top_var, width=8).grid(row=1, column=1, sticky="w", pady=(6, 0))
+        random_spin = ttk.Spinbox(tune, from_=1, to=8, textvariable=self.style_random_top_var, width=8)
+        random_spin.grid(row=1, column=1, sticky="w", pady=(6, 0))
+        self._add_tooltip(random_spin, "Choose randomly from the best N human-scored alternatives.")
         ttk.Label(tune, text="Human Noise").grid(row=1, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=0.5, variable=self.style_noise_var, orient=tk.HORIZONTAL).grid(row=1, column=3, sticky="ew", pady=(6, 0))
+        noise_scale = ttk.Scale(tune, from_=0.0, to=0.5, variable=self.style_noise_var, orient=tk.HORIZONTAL)
+        noise_scale.grid(row=1, column=3, sticky="ew", pady=(6, 0))
+        self._add_tooltip(noise_scale, "Adds randomness to move ranking for less predictable suggestions.")
 
         ttk.Label(tune, text="Dev Bonus").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.dev_weight_var, orient=tk.HORIZONTAL).grid(row=2, column=1, sticky="ew", pady=(6, 0))
+        dev_scale = ttk.Scale(tune, from_=0.0, to=1.0, variable=self.dev_weight_var, orient=tk.HORIZONTAL)
+        dev_scale.grid(row=2, column=1, sticky="ew", pady=(6, 0))
+        self._add_tooltip(dev_scale, "Reward early development (knights/bishops).")
         ttk.Label(tune, text="Castle Bonus").grid(row=2, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.castle_weight_var, orient=tk.HORIZONTAL).grid(row=2, column=3, sticky="ew", pady=(6, 0))
+        castle_scale = ttk.Scale(tune, from_=0.0, to=1.0, variable=self.castle_weight_var, orient=tk.HORIZONTAL)
+        castle_scale.grid(row=2, column=3, sticky="ew", pady=(6, 0))
+        self._add_tooltip(castle_scale, "Reward castling to improve king safety.")
 
         ttk.Label(tune, text="Center Pawn").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.center_pawn_weight_var, orient=tk.HORIZONTAL).grid(row=3, column=1, sticky="ew", pady=(6, 0))
+        center_scale = ttk.Scale(tune, from_=0.0, to=1.0, variable=self.center_pawn_weight_var, orient=tk.HORIZONTAL)
+        center_scale.grid(row=3, column=1, sticky="ew", pady=(6, 0))
+        self._add_tooltip(center_scale, "Reward central pawn advances (c/d/e/f files).")
         ttk.Label(tune, text="Capture Bonus").grid(row=3, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.capture_weight_var, orient=tk.HORIZONTAL).grid(row=3, column=3, sticky="ew", pady=(6, 0))
+        capture_scale = ttk.Scale(tune, from_=0.0, to=1.0, variable=self.capture_weight_var, orient=tk.HORIZONTAL)
+        capture_scale.grid(row=3, column=3, sticky="ew", pady=(6, 0))
+        self._add_tooltip(capture_scale, "Reward capture moves that simplify or win material.")
 
         ttk.Label(tune, text="Check Bonus").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.check_weight_var, orient=tk.HORIZONTAL).grid(row=4, column=1, sticky="ew", pady=(6, 0))
+        check_scale = ttk.Scale(tune, from_=0.0, to=1.0, variable=self.check_weight_var, orient=tk.HORIZONTAL)
+        check_scale.grid(row=4, column=1, sticky="ew", pady=(6, 0))
+        self._add_tooltip(check_scale, "Reward moves that give check and force responses.")
         ttk.Label(tune, text="Retreat Penalty").grid(row=4, column=2, sticky="w", padx=(12, 0), pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.retreat_penalty_var, orient=tk.HORIZONTAL).grid(row=4, column=3, sticky="ew", pady=(6, 0))
+        retreat_scale = ttk.Scale(tune, from_=0.0, to=1.0, variable=self.retreat_penalty_var, orient=tk.HORIZONTAL)
+        retreat_scale.grid(row=4, column=3, sticky="ew", pady=(6, 0))
+        self._add_tooltip(retreat_scale, "Penalty for passive retreat moves that are not tactical.")
 
         ttk.Label(tune, text="Conversion Bonus").grid(row=5, column=0, sticky="w", pady=(6, 0))
-        ttk.Scale(tune, from_=0.0, to=1.0, variable=self.conversion_weight_var, orient=tk.HORIZONTAL).grid(row=5, column=1, sticky="ew", pady=(6, 0))
+        conversion_scale = ttk.Scale(tune, from_=0.0, to=1.0, variable=self.conversion_weight_var, orient=tk.HORIZONTAL)
+        conversion_scale.grid(row=5, column=1, sticky="ew", pady=(6, 0))
+        self._add_tooltip(conversion_scale, "Preference for cleanly converting a winning advantage.")
 
         file_row = ttk.Frame(panel)
         file_row.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         file_row.columnconfigure(1, weight=1)
         ttk.Label(file_row, text="Settings File").grid(row=0, column=0, sticky="w")
-        ttk.Entry(file_row, textvariable=self.settings_file_var).grid(row=0, column=1, sticky="ew", padx=(8, 8))
+        settings_entry = ttk.Entry(file_row, textvariable=self.settings_file_var)
+        settings_entry.grid(row=0, column=1, sticky="ew", padx=(8, 8))
+        self._add_tooltip(settings_entry, "Currently active settings profile path.")
 
         action_row = ttk.Frame(panel)
         action_row.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         action_row.columnconfigure((0, 1, 2, 3), weight=1)
-        ttk.Button(action_row, text="New Settings", command=self._new_settings_file).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ttk.Button(action_row, text="Load Settings", command=self._load_settings_dialog).grid(row=0, column=1, sticky="ew", padx=4)
-        ttk.Button(action_row, text="Save", command=self._save_settings).grid(row=0, column=2, sticky="ew", padx=4)
-        ttk.Button(action_row, text="Save As", command=self._save_settings_as).grid(row=0, column=3, sticky="ew", padx=(4, 0))
+        new_btn = ttk.Button(action_row, text="New Settings", command=self._new_settings_file)
+        new_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self._add_tooltip(new_btn, "Start a new settings profile and save it as a new file.")
+        load_btn = ttk.Button(action_row, text="Load Settings", command=self._load_settings_dialog)
+        load_btn.grid(row=0, column=1, sticky="ew", padx=4)
+        self._add_tooltip(load_btn, "Load a saved settings profile from disk.")
+        save_btn = ttk.Button(action_row, text="Save", command=self._save_settings)
+        save_btn.grid(row=0, column=2, sticky="ew", padx=4)
+        self._add_tooltip(save_btn, "Save current values to the active settings file.")
+        save_as_btn = ttk.Button(action_row, text="Save As", command=self._save_settings_as)
+        save_as_btn.grid(row=0, column=3, sticky="ew", padx=(4, 0))
+        self._add_tooltip(save_as_btn, "Save current values to a new settings profile file.")
 
     def _position_panel(self, parent: ttk.Frame) -> None:
         panel = ttk.LabelFrame(parent, text="Position Builder", padding=10)

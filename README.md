@@ -166,6 +166,7 @@ Use the Engine panel settings controls to avoid reconfiguring every session:
 - Save As: write current settings to a new profile file
 
 The active settings file path is shown directly in the app.
+Most playstyle controls now include hover tooltips in-app with quick descriptions.
 
 ## Generic Install
 
