@@ -57,7 +57,7 @@ A clean desktop GUI for building chess positions and asking Stockfish for move s
 ## Install From GitHub
 
 ```bash
-git clone https://github.com/<your-username>/stockfish-position-explorer-gui.git
+git clone https://github.com/Evren12346/stockfish-position-explorer-gui.git
 cd stockfish-position-explorer-gui
 ```
 
