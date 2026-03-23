@@ -49,6 +49,21 @@ PIECE_MAP = {
     "Black Pawn": chess.Piece(chess.PAWN, chess.BLACK),
 }
 
+PIECE_ICON_MAP = {
+    "K": "♔",
+    "Q": "♕",
+    "R": "♖",
+    "B": "♗",
+    "N": "♘",
+    "P": "♙",
+    "k": "♚",
+    "q": "♛",
+    "r": "♜",
+    "b": "♝",
+    "n": "♞",
+    "p": "♟",
+}
+
 # Simple built-in opening fallback used before engine search.
 # Keys are tuples of UCI moves from the starting position.
 OPENING_BOOK = {
@@ -1562,14 +1577,41 @@ class StockfishGUI:
 
                 piece = view_board.piece_at(square)
                 if piece:
-                    symbol = piece.symbol()
-                    text_color = "#102030" if piece.color == chess.WHITE else "#f2f6ff"
+                    icon = PIECE_ICON_MAP.get(piece.symbol(), piece.symbol())
+                    if piece.color == chess.WHITE:
+                        badge_fill = "#f6fbff"
+                        badge_outline = "#9cb9cc"
+                        text_color = "#1a2c3d"
+                    else:
+                        badge_fill = "#0f1d2a"
+                        badge_outline = "#88a3bb"
+                        text_color = "#f5f9ff"
+
+                    cx = x1 + self.square_size / 2
+                    cy = y1 + self.square_size / 2
+                    r = self.square_size * 0.33
+                    self.canvas.create_oval(
+                        cx - r,
+                        cy - r,
+                        cx + r,
+                        cy + r,
+                        fill=badge_fill,
+                        outline=badge_outline,
+                        width=2,
+                    )
                     self.canvas.create_text(
-                        x1 + self.square_size / 2,
-                        y1 + self.square_size / 2,
-                        text=symbol,
+                        cx + 1,
+                        cy + 1,
+                        text=icon,
+                        fill="#000000",
+                        font=("DejaVu Sans", 32, "bold"),
+                    )
+                    self.canvas.create_text(
+                        cx,
+                        cy,
+                        text=icon,
                         fill=text_color,
-                        font=("Consolas", 28, "bold"),
+                        font=("DejaVu Sans", 32, "bold"),
                     )
 
         files = "abcdefgh"
