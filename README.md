@@ -54,6 +54,41 @@ A clean desktop GUI for building chess positions and asking Stockfish for move s
 - Python package:
   - `python-chess`
 
+## Get Stockfish (All Platforms)
+
+Install Stockfish first, then verify the executable is available.
+
+Linux (Ubuntu/Debian):
+
+```bash
+sudo apt update
+sudo apt install -y stockfish
+which stockfish
+stockfish
+```
+
+macOS (Homebrew):
+
+```bash
+brew install stockfish
+which stockfish
+stockfish
+```
+
+Windows (PowerShell):
+
+```powershell
+winget install official-stockfish.Stockfish
+where.exe stockfish
+stockfish
+```
+
+If package-manager install is unavailable, download Stockfish from the official site:
+
+- https://stockfishchess.org/download/
+
+After launching this app, if Stockfish is not auto-detected, click Browse and select the Stockfish executable manually.
+
 ## Install From GitHub
 
 ```bash
