@@ -159,6 +159,7 @@ class StockfishGUI:
         self.turn_var = tk.StringVar(value="white")
         self.position_analyze_color_var = tk.StringVar(value="white")
         self.position_analyze_mode_var = tk.StringVar(value="strict")
+        self.perfect_mode_var = tk.BooleanVar(value=False)
         self.inconsistency_cp_var = tk.IntVar(value=120)
         self.practical_style_var = tk.StringVar(value="Balanced")
         self.opponent_profile_var = tk.StringVar(value="Club")
@@ -226,6 +227,7 @@ class StockfishGUI:
             "flip_board": bool(self.flip_board_var.get()),
             "position_threshold": self.position_analyze_mode_var.get(),
             "position_color": self.position_analyze_color_var.get(),
+            "perfect_mode": bool(self.perfect_mode_var.get()),
             "style_floor": int(self.style_floor_var.get()),
             "style_bonus_gap": int(self.style_bonus_gap_var.get()),
             "style_random_top": int(self.style_random_top_var.get()),
@@ -249,6 +251,7 @@ class StockfishGUI:
         self.flip_board_var.set(bool(data.get("flip_board", self.flip_board_var.get())))
         self.position_analyze_mode_var.set(data.get("position_threshold", self.position_analyze_mode_var.get()))
         self.position_analyze_color_var.set(data.get("position_color", self.position_analyze_color_var.get()))
+        self.perfect_mode_var.set(bool(data.get("perfect_mode", self.perfect_mode_var.get())))
         self.style_floor_var.set(int(data.get("style_floor", self.style_floor_var.get())))
         self.style_bonus_gap_var.set(int(data.get("style_bonus_gap", self.style_bonus_gap_var.get())))
         self.style_random_top_var.set(int(data.get("style_random_top", self.style_random_top_var.get())))
@@ -461,8 +464,15 @@ class StockfishGUI:
         profile_box.grid(row=2, column=2, sticky="e", pady=(8, 0))
         self._add_tooltip(profile_box, "Adjusts risk tolerance to match expected opponent strength.")
 
+        perfect_check = ttk.Checkbutton(panel, text="Perfect Mode", variable=self.perfect_mode_var)
+        perfect_check.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        self._add_tooltip(
+            perfect_check,
+            "When enabled, play actions always re-analyze and play Stockfish's best move for the current position.",
+        )
+
         btn_row = ttk.Frame(panel)
-        btn_row.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        btn_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         btn_row.columnconfigure((0, 1), weight=1)
 
         self.analyze_best_btn = ttk.Button(btn_row, text="Analyze Best Move", command=self.analyze_best_move)
@@ -471,19 +481,20 @@ class StockfishGUI:
         self.analyze_practical_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         apply_row = ttk.Frame(panel)
-        apply_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 0))
-        apply_row.columnconfigure((0, 1), weight=1)
+        apply_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        apply_row.columnconfigure((0, 1, 2), weight=1)
         ttk.Button(apply_row, text="Play Best Move", command=self.play_best_move).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ttk.Button(apply_row, text="Play Practical Move", command=self.play_practical_move).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        ttk.Button(apply_row, text="Play Practical Move", command=self.play_practical_move).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Button(apply_row, text="Play Perfect Move", command=self.play_perfect_move).grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
         async_row = ttk.Frame(panel)
-        async_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        async_row.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         async_row.columnconfigure(0, weight=1)
         self.cancel_analysis_btn = ttk.Button(async_row, text="Cancel Analysis", command=self.cancel_analysis, state=tk.DISABLED)
         self.cancel_analysis_btn.grid(row=0, column=0, sticky="ew")
 
         tune = ttk.LabelFrame(panel, text="Playstyle Tuning", padding=8)
-        tune.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        tune.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         tune.columnconfigure((1, 3), weight=1)
 
         ttk.Label(tune, text="Winning Floor").grid(row=0, column=0, sticky="w")
@@ -537,7 +548,7 @@ class StockfishGUI:
         self._add_tooltip(conversion_scale, "Preference for cleanly converting a winning advantage.")
 
         file_row = ttk.Frame(panel)
-        file_row.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        file_row.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         file_row.columnconfigure(1, weight=1)
         ttk.Label(file_row, text="Settings File").grid(row=0, column=0, sticky="w")
         settings_entry = ttk.Entry(file_row, textvariable=self.settings_file_var)
@@ -545,7 +556,7 @@ class StockfishGUI:
         self._add_tooltip(settings_entry, "Currently active settings profile path.")
 
         action_row = ttk.Frame(panel)
-        action_row.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        action_row.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         action_row.columnconfigure((0, 1, 2, 3), weight=1)
         new_btn = ttk.Button(action_row, text="New Settings", command=self._new_settings_file)
         new_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
@@ -1351,6 +1362,29 @@ class StockfishGUI:
             self._refresh_board_state()
             return
 
+        if mode == "perfect":
+            self.practical_move = None
+            self.practical_move_var.set(f"PV: {best['pv']}")
+            self.explanation_var.set(
+                f"Why this move: {move_explanation(self.board, best['move'], best_side_cp)}"
+            )
+            self.trap_var.set(f"Trap scan: {trap_scan(lines, side_factor)}")
+            self._record_analysis("Perfect", best["move"], best["score_text"])
+            src = "opening book" if source == "book" else ("cache" if source == "cache" else "engine")
+
+            if best["move"] not in self.board.legal_moves:
+                self.info_var.set("Perfect mode analysis finished, but the position changed before the move could be played.")
+                self._refresh_board_state()
+                return
+
+            self.board.push(best["move"])
+            self.selected_square = None
+            self.legal_target_squares.clear()
+            self._clear_suggestions()
+            self.info_var.set(f"Perfect mode played: {best['move'].uci()} ({src}).")
+            self._refresh_board_state()
+            return
+
         practical = self._choose_practical_winning_move(lines, source, side_factor)
         if practical is None:
             # Always keep a winning plan by falling back to the strongest line.
@@ -1647,10 +1681,22 @@ class StockfishGUI:
         self._refresh_board_state()
 
     def play_best_move(self) -> None:
+        if self.perfect_mode_var.get():
+            self.play_perfect_move()
+            return
         self._play_suggested_move(self.best_move, "Best")
 
     def play_practical_move(self) -> None:
+        if self.perfect_mode_var.get():
+            self.play_perfect_move()
+            return
         self._play_suggested_move(self.practical_move, "Practical")
+
+    def play_perfect_move(self) -> None:
+        if self.analysis_running:
+            self.info_var.set("Analysis already running. Cancel or wait.")
+            return
+        self._start_analysis("perfect")
 
     def _import_pgn(self) -> None:
         path = filedialog.askopenfilename(
