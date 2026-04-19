@@ -144,9 +144,11 @@ class StockfishGUI:
         self.analysis_running = False
         self.current_engine: chess.engine.SimpleEngine | None = None
         self.current_engine_path = ""
+        self.current_elo_enabled = False
+        self.current_elo = 3200
         self.engine_lock = threading.Lock()
         self.cache_lock = threading.Lock()
-        self.analysis_cache: dict[tuple[str, int, int], dict] = {}
+        self.analysis_cache: dict[tuple[str, int, int, bool, int], dict] = {}
         self.last_imported_games: list[chess.pgn.Game] = []
         self.current_game_headers: dict[str, str] = {}
 
@@ -154,6 +156,8 @@ class StockfishGUI:
         self.engine_path_var = tk.StringVar(value=default_engine)
         self.depth_var = tk.IntVar(value=16)
         self.lines_var = tk.IntVar(value=6)
+        self.elo_enabled_var = tk.BooleanVar(value=False)
+        self.elo_var = tk.IntVar(value=1500)
         self.edit_mode_var = tk.BooleanVar(value=False)
         self.selected_piece_var = tk.StringVar(value="White Pawn")
         self.turn_var = tk.StringVar(value="white")
@@ -221,6 +225,8 @@ class StockfishGUI:
             "engine_path": self.engine_path_var.get().strip(),
             "depth": int(self.depth_var.get()),
             "top_lines": int(self.lines_var.get()),
+            "elo_enabled": bool(self.elo_enabled_var.get()),
+            "elo_rating": int(self.elo_var.get()),
             "inconsistency_cp": int(self.inconsistency_cp_var.get()),
             "practical_style": self.practical_style_var.get(),
             "opponent_profile": self.opponent_profile_var.get(),
@@ -245,6 +251,8 @@ class StockfishGUI:
         self.engine_path_var.set(data.get("engine_path", self.engine_path_var.get()))
         self.depth_var.set(int(data.get("depth", self.depth_var.get())))
         self.lines_var.set(int(data.get("top_lines", self.lines_var.get())))
+        self.elo_enabled_var.set(bool(data.get("elo_enabled", self.elo_enabled_var.get())))
+        self.elo_var.set(int(data.get("elo_rating", self.elo_var.get())))
         self.inconsistency_cp_var.set(int(data.get("inconsistency_cp", self.inconsistency_cp_var.get())))
         self.practical_style_var.set(data.get("practical_style", self.practical_style_var.get()))
         self.opponent_profile_var.set(data.get("opponent_profile", self.opponent_profile_var.get()))
@@ -351,7 +359,13 @@ class StockfishGUI:
 
     def _ensure_engine(self, engine_path: str) -> chess.engine.SimpleEngine:
         with self.engine_lock:
-            if self.current_engine is not None and self.current_engine_path == engine_path:
+            elo_enabled = self.elo_enabled_var.get()
+            elo_rating = self.elo_var.get()
+            
+            if (self.current_engine is not None and 
+                self.current_engine_path == engine_path and
+                self.current_elo_enabled == elo_enabled and
+                self.current_elo == elo_rating):
                 return self.current_engine
 
             if self.current_engine is not None:
@@ -363,6 +377,17 @@ class StockfishGUI:
 
             self.current_engine = chess.engine.SimpleEngine.popen_uci(engine_path)
             self.current_engine_path = engine_path
+            self.current_elo_enabled = elo_enabled
+            self.current_elo = elo_rating
+            
+            # Configure Elo if enabled
+            if elo_enabled:
+                try:
+                    self.current_engine.configure({"UCI_Elo": elo_rating})
+                except Exception:
+                    # Some engines might not support UCI_Elo
+                    pass
+            
             return self.current_engine
 
     def _build_ui(self) -> None:
@@ -441,7 +466,16 @@ class StockfishGUI:
         ttk.Label(panel, text="Top Lines").grid(row=1, column=2, sticky="w", pady=(8, 0))
         ttk.Spinbox(panel, from_=2, to=12, textvariable=self.lines_var, width=8).grid(row=1, column=2, sticky="e", pady=(8, 0))
 
-        ttk.Label(panel, text="Practical Style").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(panel, text="Limit Elo", variable=self.elo_enabled_var).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        elo_frame = ttk.Frame(panel)
+        elo_frame.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(8, 0))
+        ttk.Label(elo_frame, text="500").pack(side=tk.LEFT)
+        elo_scale = ttk.Scale(elo_frame, from_=500, to=3200, variable=self.elo_var, orient=tk.HORIZONTAL)
+        elo_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(elo_frame, text="3200").pack(side=tk.LEFT)
+        self._add_tooltip(elo_scale, "Adjust Stockfish Elo rating (500=beginner, 3200=master). Only active when 'Limit Elo' is checked.")
+
+        ttk.Label(panel, text="Practical Style").grid(row=3, column=0, sticky="w", pady=(8, 0))
         style_box = ttk.Combobox(
             panel,
             values=["Safe", "Balanced", "Tricky", "Chaotic"],
@@ -449,11 +483,11 @@ class StockfishGUI:
             state="readonly",
             width=12,
         )
-        style_box.grid(row=2, column=1, sticky="w", pady=(8, 0))
+        style_box.grid(row=3, column=1, sticky="w", pady=(8, 0))
         style_box.bind("<<ComboboxSelected>>", lambda _e: self._sync_playstyle_from_preset())
         self._add_tooltip(style_box, "Preset baseline for practical move behavior. You can fine-tune below.")
 
-        ttk.Label(panel, text="Opponent Profile").grid(row=2, column=2, sticky="w", pady=(8, 0))
+        ttk.Label(panel, text="Opponent Profile").grid(row=3, column=2, sticky="w", pady=(8, 0))
         profile_box = ttk.Combobox(
             panel,
             values=["Beginner", "Club", "Advanced", "Engine-like"],
@@ -461,18 +495,18 @@ class StockfishGUI:
             state="readonly",
             width=12,
         )
-        profile_box.grid(row=2, column=2, sticky="e", pady=(8, 0))
+        profile_box.grid(row=3, column=2, sticky="e", pady=(8, 0))
         self._add_tooltip(profile_box, "Adjusts risk tolerance to match expected opponent strength.")
 
         perfect_check = ttk.Checkbutton(panel, text="Perfect Mode", variable=self.perfect_mode_var)
-        perfect_check.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        perfect_check.grid(row=4, column=0, sticky="w", pady=(8, 0))
         self._add_tooltip(
             perfect_check,
             "When enabled, play actions always re-analyze and play Stockfish's best move for the current position.",
         )
 
         btn_row = ttk.Frame(panel)
-        btn_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        btn_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         btn_row.columnconfigure((0, 1), weight=1)
 
         self.analyze_best_btn = ttk.Button(btn_row, text="Analyze Best Move", command=self.analyze_best_move)
@@ -481,20 +515,20 @@ class StockfishGUI:
         self.analyze_practical_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         apply_row = ttk.Frame(panel)
-        apply_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        apply_row.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         apply_row.columnconfigure((0, 1, 2), weight=1)
         ttk.Button(apply_row, text="Play Best Move", command=self.play_best_move).grid(row=0, column=0, sticky="ew", padx=(0, 4))
         ttk.Button(apply_row, text="Play Practical Move", command=self.play_practical_move).grid(row=0, column=1, sticky="ew", padx=4)
         ttk.Button(apply_row, text="Play Perfect Move", command=self.play_perfect_move).grid(row=0, column=2, sticky="ew", padx=(4, 0))
 
         async_row = ttk.Frame(panel)
-        async_row.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        async_row.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         async_row.columnconfigure(0, weight=1)
         self.cancel_analysis_btn = ttk.Button(async_row, text="Cancel Analysis", command=self.cancel_analysis, state=tk.DISABLED)
         self.cancel_analysis_btn.grid(row=0, column=0, sticky="ew")
 
         tune = ttk.LabelFrame(panel, text="Playstyle Tuning", padding=8)
-        tune.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        tune.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         tune.columnconfigure((1, 3), weight=1)
 
         ttk.Label(tune, text="Winning Floor").grid(row=0, column=0, sticky="w")
@@ -580,7 +614,7 @@ class StockfishGUI:
         self._add_tooltip(conversion_scale, "Preference for cleanly converting a winning advantage.")
 
         file_row = ttk.Frame(panel)
-        file_row.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        file_row.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         file_row.columnconfigure(1, weight=1)
         ttk.Label(file_row, text="Settings File").grid(row=0, column=0, sticky="w")
         settings_entry = ttk.Entry(file_row, textvariable=self.settings_file_var)
@@ -588,7 +622,7 @@ class StockfishGUI:
         self._add_tooltip(settings_entry, "Currently active settings profile path.")
 
         action_row = ttk.Frame(panel)
-        action_row.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        action_row.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         action_row.columnconfigure((0, 1, 2, 3), weight=1)
         new_btn = ttk.Button(action_row, text="New Settings", command=self._new_settings_file)
         new_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
@@ -1178,7 +1212,9 @@ class StockfishGUI:
     def _run_analysis_job(self, board_fen: str, engine_path: str, depth: int, multipv: int) -> dict:
         board = chess.Board(board_fen)
         side_factor = 1 if board.turn == chess.WHITE else -1
-        cache_key = (board_fen, depth, multipv)
+        elo_enabled = self.elo_enabled_var.get()
+        elo_rating = self.elo_var.get() if elo_enabled else 3200
+        cache_key = (board_fen, depth, multipv, elo_enabled, elo_rating)
 
         with self.cache_lock:
             cached = self.analysis_cache.get(cache_key)
